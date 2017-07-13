@@ -1,0 +1,8 @@
+webserver: apache
+server_ip: 192.168.111.8
+server_name: soso.com
+server_hostname: soso
+db_name: wordpress
+db_username: user
+db_password: password
+web_user: www-data

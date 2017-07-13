@@ -1,0 +1,86 @@
+- hosts: all
+  become: yes
+
+  tasks:
+  - name: "include vars"
+    include_vars:
+        file: vars.yml 
+  - name: "Configure hosts"
+    template:
+        src: hosts
+        dest: /etc/hosts
+
+  - name: "Define Web Server as apache2"
+    set_fact:
+        web_server: apache2
+        web_file: apache2-website.conf  
+        def_file: 000-default.conf 
+    when: webserver  == "apache"
+        
+  - name: "Define Web Server as nginx"
+    set_fact:
+        web_server: nginx
+        web_file: nginx-website.conf 
+        def_file: default 
+    when: webserver  == "nginx"
+
+  - name: "Install packages including {{ webserver }}"
+    apt:
+        name: "{{ item }}"
+    with_items:
+            - ['{{web_server}}', 'mysql-server','php-mysql', 'php', 'php-fpm', 'python-mysqldb' ]
+
+  - name: "install addtional apache2 library for apache2"
+    apt:
+       name: libapache2-mod-php
+    when: webserver == "apache"
+
+  - name: "Add Virtual Host for {{ webserver }}"
+    template:
+        src: "{{ web_file }}" 
+        dest: /etc/{{web_server}}/sites-available/website.conf
+            
+  - name: "remove default server from sites-enabled"
+    file:
+        path: /etc/{{web_server}}/sites-enabled/{{def_file}}
+        state: absent
+
+  - name: "Enable the Virutal Host"
+    file:
+        src: /etc/{{web_server}}/sites-available/website.conf
+        dest: /etc/{{web_server}}/sites-enabled/website.conf
+        state: link
+
+  - name: "Configure MySQL"
+    mysql_db: 
+        name: "{{ db_name }}"
+        state: present
+
+  - name: "Create MySQL database"
+    mysql_user:
+        name: "{{ db_username }}"
+        password: "{{ db_password }}"
+        priv: '{{ db_name }}.*:ALL'
+        state: present
+
+  - name: "Download and untar wordpress"
+    unarchive: 
+        src: https://www.wordpress.org/latest.tar.gz
+        dest: /var/www/
+        remote_src: True
+        owner: "{{web_user}}" 
+        group: "{{web_user}}"
+    retries: 10
+    delay: 3
+  
+  - name: "Configure wordpress database connection"
+    template:
+        src: wp-config.php
+        dest: /var/www/wordpress/
+        owner: "{{web_user}}" 
+        group: "{{web_user}}"
+
+  - name: "Start {{ web_server }} service"
+    systemd:
+        name: "{{ web_server }}" 
+        state: restarted
